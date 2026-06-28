@@ -259,7 +259,7 @@ Be conversational, caring, and actionable. Keep responses under 3 short paragrap
     // Construct the contents including the history and the current user message
     const formattedHistory = chatHistory.map(h => ({
       role: h.role === 'model' ? 'model' as const : 'user' as const,
-      parts: [{ text: h.parts[0].text }]
+     parts: [{ text: h.parts?.[0]?.text || "" }]
     }));
 
     // Add the current message
@@ -268,18 +268,24 @@ Be conversational, caring, and actionable. Keep responses under 3 short paragrap
       parts: [{ text: message }]
     });
 
-    const response = await ai.models.generateContent({
-      model: "gemini-3.5-flash",
-      contents: formattedHistory,
-      config: {
-        systemInstruction: systemInstruction,
-        temperature: 0.7,
-      }
-    });
+    const recentHistory = formattedHistory.slice(-10);
+
+   const response = await ai.models.generateContent({
+  model: "gemini-3.5-flash",
+  contents: recentHistory,
+  config: {
+    systemInstruction,
+    temperature: 0.7,
+  },
+});
 
     return response.text || "I apologize, I didn't get that. How can I help you adjust your schedule?";
-  } catch (err) {
-    console.error("Error in getNudgeResponse:", err);
-    return "I had a bit of trouble processing that. Can you tell me more about what you'd like to adjust?";
+  }catch (err: any) {
+  if (err?.status === 429) {
+    return "Nudge is receiving a lot of requests right now. Please try again in a moment.";
   }
+
+  console.error(err);
+  return "Something went wrong.";
+}
 }

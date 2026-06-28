@@ -22,7 +22,7 @@ import {
   onSnapshot, 
   orderBy 
 } from "firebase/firestore";
-import { Task, WorkloadDay, ForecastSummary, RecommendedAction, NotificationItem, ChatMessage, SubTask } from "../types.js";
+import { Task, WorkloadDay, ForecastSummary, RecommendedAction, NotificationItem, ChatMessage, SubTask, FocusEvent } from "../types.js";
 import { calculateTaskRisk, generateWorkloadForecast, getRecommendedNextAction, generateSmartNotifications } from "../utils/forecastEngine.js";
 
 export enum OperationType {
@@ -105,6 +105,10 @@ interface AppContextType {
   // Notification Functions
   markNotificationRead: (id: string) => void;
   clearAllNotifications: () => void;
+
+  // Focus Events
+  focusEvents: FocusEvent[];
+  addFocusEvent: (event: Omit<FocusEvent, 'id' | 'userId' | 'timestamp'>) => Promise<void>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -185,6 +189,70 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     return unsubscribe;
   }, [user]);
+
+  // Focus tracking state and effects
+  const [focusEvents, setFocusEvents] = useState<FocusEvent[]>([]);
+
+  // Load focus events from LocalStorage on mount
+  useEffect(() => {
+    const saved = localStorage.getItem("nudge_focus_events");
+    if (saved) {
+      try {
+        setFocusEvents(JSON.parse(saved));
+      } catch (e) {
+        console.error("Error parsing saved focus events:", e);
+      }
+    }
+  }, []);
+
+  // Sync focus events with Firestore when user is logged in
+  useEffect(() => {
+    if (!user) return;
+    
+    const eventsRef = collection(db, "focus_events");
+    const q = query(eventsRef, where("userId", "==", user.uid));
+    
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const fetchedEvents: FocusEvent[] = [];
+      snapshot.forEach((doc) => {
+        fetchedEvents.push(doc.data() as FocusEvent);
+      });
+      if (fetchedEvents.length > 0) {
+        fetchedEvents.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+        setFocusEvents(fetchedEvents);
+        localStorage.setItem("nudge_focus_events", JSON.stringify(fetchedEvents));
+      }
+    }, (error) => {
+      console.error("Error syncing focus events:", error);
+    });
+
+    return unsubscribe;
+  }, [user]);
+
+  const addFocusEvent = async (eventData: Omit<FocusEvent, 'id' | 'userId' | 'timestamp'>) => {
+    const id = `event_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const userId = user ? user.uid : "guest";
+    const timestamp = new Date().toISOString();
+    
+    const newEvent: FocusEvent = {
+      ...eventData,
+      id,
+      userId,
+      timestamp
+    };
+
+    const updated = [...focusEvents, newEvent];
+    setFocusEvents(updated);
+    localStorage.setItem("nudge_focus_events", JSON.stringify(updated));
+
+    if (user) {
+      try {
+        await setDoc(doc(db, "focus_events", id), newEvent);
+      } catch (err) {
+        console.error("Error writing focus event to firestore:", err);
+      }
+    }
+  };
 
   // 3. Dynamic Workload Calculations & Analytics (Engine Sync)
   const [forecastDays, setForecastDays] = useState<WorkloadDay[]>([]);
@@ -539,7 +607,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       clearChat,
       
       markNotificationRead,
-      clearAllNotifications
+      clearAllNotifications,
+      
+      focusEvents,
+      addFocusEvent
     }}>
       {children}
     </AppContext.Provider>

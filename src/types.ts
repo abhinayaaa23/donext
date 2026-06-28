@@ -64,3 +64,16 @@ export interface NotificationItem {
   type: 'info' | 'warning' | 'success';
   read: boolean;
 }
+
+export interface FocusEvent {
+  id: string;
+  userId: string;
+  taskId: string;
+  taskName: string;
+  subtaskId?: string;
+  subtaskName?: string;
+  eventType: 'start_session' | 'complete_step' | 'restart_step' | 'complete_task' | 'skip_step';
+  durationMinutes: number;
+  timestamp: string;
+}
+

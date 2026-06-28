@@ -13,7 +13,8 @@ import { SubTask, Task } from "../types.js";
 export const DashboardView: React.FC = () => {
   const { 
     user, tasks, forecastSummary, recommendedAction, 
-    updateTask, deleteTask, toggleSubtask, decomposeWithAI 
+    updateTask, deleteTask, toggleSubtask, decomposeWithAI,
+    focusEvents = [], addFocusEvent
   } = useApp();
 
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -40,6 +41,8 @@ export const DashboardView: React.FC = () => {
   const [isTimerPaused, setIsTimerPaused] = useState(false);
   const [focusFinished, setFocusFinished] = useState(false);
   const [completedStepsCount, setCompletedStepsCount] = useState(0);
+  const [stepCompletedFeedback, setStepCompletedFeedback] = useState(false);
+  const [transitionMessage, setTransitionMessage] = useState<string | null>(null);
 
   // Synchronize timer countdown
   useEffect(() => {
@@ -57,41 +60,143 @@ export const DashboardView: React.FC = () => {
 
   // Advance timer or complete session when a step finishes
   const handleStepTimerFinished = () => {
-    // Check off current subtask
+    completeCurrentStep();
+  };
+
+  const restartStep = () => {
     const currentStep = timerSteps[activeStepIndex];
     if (currentStep) {
-      toggleSubtask(timerTaskId, currentStep.id);
-      setCompletedStepsCount(prev => prev + 1);
-    }
-
-    if (activeStepIndex + 1 < timerSteps.length) {
-      // Move to next subtask
-      const nextIndex = activeStepIndex + 1;
-      setActiveStepIndex(nextIndex);
-      const nextStep = timerSteps[nextIndex];
-      setTimerSecondsLeft((nextStep.duration || 15) * 60);
-    } else {
-      // Completed last subtask! End session
-      setIsTimerActive(false);
-      setFocusFinished(true);
+      setTimerSecondsLeft((currentStep.duration || 15) * 60);
+      addFocusEvent({
+        taskId: timerTaskId,
+        taskName: timerTaskName,
+        subtaskId: currentStep.id,
+        subtaskName: currentStep.name,
+        eventType: 'restart_step',
+        durationMinutes: currentStep.duration || 15
+      });
     }
   };
 
   const skipStepEarly = () => {
-    const currentStep = timerSteps[activeStepIndex];
-    if (currentStep) {
-      toggleSubtask(timerTaskId, currentStep.id);
-      setCompletedStepsCount(prev => prev + 1);
-    }
+    completeCurrentStep();
+  };
 
-    if (activeStepIndex + 1 < timerSteps.length) {
-      const nextIndex = activeStepIndex + 1;
-      setActiveStepIndex(nextIndex);
-      const nextStep = timerSteps[nextIndex];
-      setTimerSecondsLeft((nextStep.duration || 15) * 60);
+  const completeCurrentStep = async () => {
+    const currentTask = tasks.find(t => t.id === timerTaskId);
+    if (!currentTask) return;
+
+    const currentStep = timerSteps[activeStepIndex];
+    if (!currentStep) return;
+
+    // Record complete_step event (Requirement 10)
+    addFocusEvent({
+      taskId: timerTaskId,
+      taskName: timerTaskName,
+      subtaskId: currentStep.id,
+      subtaskName: currentStep.name,
+      eventType: 'complete_step',
+      durationMinutes: currentStep.duration || 15
+    });
+
+    // Mark current subtask completed
+    await toggleSubtask(timerTaskId, currentStep.id);
+    setCompletedStepsCount(prev => prev + 1);
+
+    // Show step completed feedback (Requirement 2)
+    setStepCompletedFeedback(true);
+    setTimeout(() => {
+      setStepCompletedFeedback(false);
+    }, 2000);
+
+    // Pause the timer: "Do not automatically start the timer countdown. Load the next focus session and keep it ready." (Requirement 5)
+    setIsTimerPaused(true);
+
+    // Find the next incomplete subtask within the CURRENT task (Requirement 1)
+    const updatedSubtasks = currentTask.subtasks.map(s => 
+      s.id === currentStep.id ? { ...s, completed: true } : s
+    );
+    const nextIncompleteSubtask = updatedSubtasks.find(s => !s.completed);
+
+    if (nextIncompleteSubtask) {
+      // Load next subtask (Requirement 1 & 5)
+      const nextStep: SubTask = {
+        ...nextIncompleteSubtask,
+        duration: nextIncompleteSubtask.duration || 15
+      };
+
+      const updatedSteps = [...timerSteps];
+      updatedSteps[activeStepIndex + 1] = nextStep;
+      setTimerSteps(updatedSteps);
+      setActiveStepIndex(activeStepIndex + 1);
+      setTimerSecondsLeft(nextStep.duration * 60);
     } else {
-      setIsTimerActive(false);
-      setFocusFinished(true);
+      // The current task is completed!
+      // Do NOT end the system unless no active tasks remain.
+      // Record complete_task event
+      addFocusEvent({
+        taskId: timerTaskId,
+        taskName: timerTaskName,
+        eventType: 'complete_task',
+        durationMinutes: 0
+      });
+
+      // Mark the task complete in AppContext
+      await updateTask(timerTaskId, { completed: true, completedAt: new Date().toISOString() });
+
+      // Find other active tasks
+      const remainingTasks = tasks.map(t => t.id === timerTaskId ? { ...t, completed: true } : t)
+                                  .filter(t => !t.completed);
+
+      if (remainingTasks.length === 0) {
+        // "6. Only display a global completion state when: No active tasks remain. All subtasks across all tasks are completed."
+        setIsTimerActive(false);
+        setFocusFinished(true);
+      } else {
+        // "4. When a task is fully completed:
+        //    * Automatically identify the next highest-priority pending task.
+        //    * Load its first incomplete subtask into the Active Focus Session.
+        //    * Prepare the next focus block using that subtask's estimated duration.
+        //    * Present a smooth transition message such as: 'ML Assignment completed. Next: Buy Groceries – Preparation (30 min).'"
+        
+        const priorityWeight = { high: 3, medium: 2, low: 1 };
+        const sortedPending = [...remainingTasks].sort((a, b) => {
+          const weightA = priorityWeight[a.priority] || 0;
+          const weightB = priorityWeight[b.priority] || 0;
+          if (weightB !== weightA) return weightB - weightA;
+          return new Date(a.deadline).getTime() - new Date(b.deadline).getTime();
+        });
+
+        const nextTask = sortedPending[0];
+        if (nextTask) {
+          const nextTaskSubtask = nextTask.subtasks.find(s => !s.completed) || {
+            id: `sub_fallback_${Date.now()}`,
+            name: `General Focus`,
+            completed: false,
+            duration: 30,
+            group: "Focus"
+          };
+
+          const nextStep: SubTask = {
+            ...nextTaskSubtask,
+            duration: nextTaskSubtask.duration || 30
+          };
+
+          // Transition message (Requirement 4)
+          const msg = `"${currentTask.name}" completed. Next: ${nextTask.name} – ${nextStep.name} (${nextStep.duration} min).`;
+          setTransitionMessage(msg);
+
+          // Load it into Active Focus Session (Requirement 4 & 5)
+          setTimerTaskId(nextTask.id);
+          setTimerTaskName(nextTask.name);
+          setTimerSteps([nextStep]);
+          setActiveStepIndex(0);
+          setTimerSecondsLeft(nextStep.duration * 60);
+        } else {
+          setIsTimerActive(false);
+          setFocusFinished(true);
+        }
+      }
     }
   };
 
@@ -183,6 +288,16 @@ export const DashboardView: React.FC = () => {
     setIsTimerActive(true);
     setIsTimerPaused(false);
     setFocusFinished(false);
+    setTransitionMessage(null);
+
+    addFocusEvent({
+      taskId: task.id,
+      taskName: task.name,
+      subtaskId: steps[0]?.id,
+      subtaskName: steps[0]?.name,
+      eventType: 'start_session',
+      durationMinutes: steps[0]?.duration || 15
+    });
   };
 
   // Helper formatting countdown
@@ -327,13 +442,38 @@ export const DashboardView: React.FC = () => {
               <span className="h-2 w-2 rounded-full bg-[#5F7358] animate-ping" />
               <span className="text-[10px] font-semibold uppercase tracking-widest text-[#E8D9C1]">Active Focus Session</span>
             </div>
-            <button 
-              onClick={() => setIsTimerActive(false)}
-              className="text-xs text-[#E8D9C1] hover:text-white underline cursor-pointer"
-            >
-              Minimize
-            </button>
+            <div className="flex items-center gap-3">
+              <button 
+                onClick={restartStep}
+                className="text-xs text-[#E8D9C1] hover:text-white underline cursor-pointer flex items-center gap-1"
+              >
+                ↻ Restart Step
+              </button>
+              <span className="text-[#E8D9C1]/30 text-xs">|</span>
+              <button 
+                onClick={() => setIsTimerActive(false)}
+                className="text-xs text-[#E8D9C1] hover:text-white underline cursor-pointer"
+              >
+                Minimize
+              </button>
+            </div>
           </div>
+
+          {/* Smooth transition message banner */}
+          {transitionMessage && (
+            <div className="bg-[#E8D9C1]/10 text-[#E8D9C1] border border-[#E8D9C1]/20 rounded-[8px] p-3 text-xs flex items-center justify-between gap-3 animate-fadeIn">
+              <div className="flex items-center gap-2">
+                <Star className="h-3.5 w-3.5 text-[#E8D9C1] shrink-0" />
+                <span className="font-light">{transitionMessage}</span>
+              </div>
+              <button 
+                onClick={() => setTransitionMessage(null)}
+                className="text-[#E8D9C1] hover:text-white font-bold cursor-pointer transition-colors text-[10px] shrink-0"
+              >
+                ✕
+              </button>
+            </div>
+          )}
 
           <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-center">
             
@@ -382,15 +522,27 @@ export const DashboardView: React.FC = () => {
 
             {/* Right Column: Timer Display and controls */}
             <div className="md:col-span-5 text-center py-4 border-t md:border-t-0 md:border-l border-[#DCCFBE]/20 space-y-4">
-              <div>
-                <p className="text-[10px] font-semibold text-[#E8D9C1] uppercase tracking-widest">Active Step Time</p>
-                <div className="text-5xl font-mono font-bold text-white tracking-tight py-2">
-                  {formatTime(timerSecondsLeft)}
+              {stepCompletedFeedback ? (
+                <div className="flex flex-col items-center justify-center py-4 space-y-1.5 animate-scaleUp">
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#5F7358]/30 border border-[#5F7358]/40 text-[#5F7358] font-bold text-xs">
+                    <Check className="h-4 w-4" />
+                    ✓ Step Completed
+                  </span>
+                  <p className="text-[10px] text-[#E8D9C1]">Preparing next recommended subtask...</p>
                 </div>
-                <p className="text-[10px] text-[#F5EFE6]/60">
-                  Total Session Left: {formatTime(getTotalSessionSecondsLeft())}
-                </p>
-              </div>
+              ) : (
+                <div>
+                  <p className="text-[10px] font-semibold text-[#E8D9C1] uppercase tracking-widest truncate max-w-[250px] mx-auto" title={timerSteps[activeStepIndex]?.name || "Active Step Time"}>
+                    {timerSteps[activeStepIndex]?.name || "Active Step Time"} ({timerSteps[activeStepIndex]?.duration || 15}m)
+                  </p>
+                  <div className="text-5xl font-mono font-bold text-white tracking-tight py-2">
+                    {formatTime(timerSecondsLeft)}
+                  </div>
+                  <p className="text-[10px] text-[#F5EFE6]/60">
+                    Total Session Left: {formatTime(getTotalSessionSecondsLeft())}
+                  </p>
+                </div>
+              )}
 
               <div className="flex items-center justify-center gap-3">
                 <button
@@ -415,28 +567,65 @@ export const DashboardView: React.FC = () => {
         </div>
       )}
 
-      {/* Focus Finished Congratulatory Screen */}
+      {/* Focus Finished Congratulatory Screen (Global Completion State) */}
       {focusFinished && (
-        <div className="rounded-[10px] border border-[#DCCFBE] bg-[#F8F3EC] p-6 shadow-xs text-center space-y-4 animate-scaleUp transition-colors">
-          <div className="mx-auto w-12 h-12 rounded-full bg-[#FFFDF9] border border-[#DCCFBE] flex items-center justify-center">
-            <Award className="h-6 w-6 text-[#75162D]" />
+        <div className="rounded-[12px] border border-[#DCCFBE] bg-[#FFFDF9] p-8 md:p-10 shadow-sm text-center space-y-8 animate-scaleUp transition-all duration-300">
+          <div className="mx-auto w-16 h-16 rounded-full bg-[#5F7358]/10 border border-[#5F7358]/20 flex items-center justify-center">
+            <Award className="h-8 w-8 text-[#5F7358]" />
           </div>
-          <div className="space-y-1">
-            <h3 className="text-lg font-bold text-[#2D2520] font-sans">Well Done! Session Completed!</h3>
-            <p className="text-xs text-[#6A625B] max-w-md mx-auto leading-relaxed">
-              Brilliant effort! You conquered {completedStepsCount} focused subtask{completedStepsCount !== 1 ? 's' : ''} on "{timerTaskName}". Your upcoming deadline risk has lowered.
+          
+          <div className="space-y-2.5 max-w-xl mx-auto">
+            <span className="text-[10px] font-mono font-bold tracking-widest text-[#75162D] uppercase block">Workload Cleared</span>
+            <h3 className="text-2xl font-normal text-[#2D2520] font-display leading-tight">Every Milestone Achieved</h3>
+            <p className="text-xs text-[#6A625B] leading-relaxed font-light">
+              {(() => {
+                const totalMinutesFocused = focusEvents.filter((e: any) => e.eventType === 'complete_step').reduce((acc: number, e: any) => acc + e.durationMinutes, 0);
+                const totalSessionsCompleted = focusEvents.filter((e: any) => e.eventType === 'complete_step').length;
+                if (totalMinutesFocused === 0) {
+                  return "You've successfully organized your entire workload! Every task is neatly aligned, and all checkpoints are completed. Your mental calendar is clear and ready.";
+                }
+                if (totalMinutesFocused < 60) {
+                  return `An outstanding achievement! You maintained deep focus across ${totalSessionsCompleted} session${totalSessionsCompleted !== 1 ? 's' : ''} to complete all scheduled subtasks. By pacing your efforts sequentially, you protected your focus and cleared your workload without friction.`;
+                }
+                const hours = (totalMinutesFocused / 60).toFixed(1);
+                return `An exceptional pacing milestone! You accumulated ${hours} hours of high-quality, continuous deep focus to finish every single task. This methodical approach ensures your projects were completed on time while completely eliminating last-minute scheduling pressure.`;
+              })()}
             </p>
           </div>
-          <div className="flex items-center justify-center gap-3 pt-1">
+
+          <div className="grid grid-cols-3 gap-4 max-w-lg mx-auto pt-2">
+            <div className="border border-[#DCCFBE]/60 bg-[#F8F3EC]/50 rounded-[10px] p-4 text-center">
+              <span className="text-[10px] font-mono font-semibold text-[#6A625B] uppercase tracking-wider block">Tasks Cleared</span>
+              <span className="text-2xl font-bold text-[#75162D] font-sans mt-1.5 block font-display">
+                {tasks.filter(t => t.completed).length}
+              </span>
+            </div>
+            
+            <div className="border border-[#DCCFBE]/60 bg-[#F8F3EC]/50 rounded-[10px] p-4 text-center">
+              <span className="text-[10px] font-mono font-semibold text-[#6A625B] uppercase tracking-wider block">Focus Sessions</span>
+              <span className="text-2xl font-bold text-[#75162D] font-sans mt-1.5 block font-display">
+                {focusEvents.filter((e: any) => e.eventType === 'complete_step').length}
+              </span>
+            </div>
+
+            <div className="border border-[#DCCFBE]/60 bg-[#F8F3EC]/50 rounded-[10px] p-4 text-center">
+              <span className="text-[10px] font-mono font-semibold text-[#6A625B] uppercase tracking-wider block">Minutes Focused</span>
+              <span className="text-2xl font-bold text-[#75162D] font-sans mt-1.5 block font-display">
+                {focusEvents.filter((e: any) => e.eventType === 'complete_step').reduce((acc: number, e: any) => acc + e.durationMinutes, 0)}
+              </span>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-center pt-2">
             <button
               onClick={() => {
                 setFocusFinished(false);
                 setTimerTaskId("");
                 setTimerTaskName("");
               }}
-              className="bg-[#75162D] hover:bg-[#560B18] text-[#F5EFE6] rounded-[8px] px-6 py-2.5 text-xs font-semibold cursor-pointer transition-all shadow-xs"
+              className="bg-[#75162D] hover:bg-[#560B18] text-[#F5EFE6] rounded-[8px] px-8 py-3 text-xs font-semibold cursor-pointer transition-all shadow-xs"
             >
-              Great, Continue Planning
+              Back to Planner
             </button>
           </div>
         </div>
@@ -928,6 +1117,19 @@ export const DashboardView: React.FC = () => {
             </p>
             
             <ul className="space-y-3 text-xs text-[#2D2520] font-light leading-relaxed">
+              {(() => {
+                const totalSessionsCompleted = focusEvents.filter((e: any) => e.eventType === 'complete_step').length;
+                const totalMinutesFocused = focusEvents.filter((e: any) => e.eventType === 'complete_step').reduce((acc: number, e: any) => acc + e.durationMinutes, 0);
+                if (totalSessionsCompleted > 0) {
+                  return (
+                    <li className="flex items-start gap-2.5 font-medium text-[#75162D]">
+                      <span className="text-[#5F7358] select-none font-semibold mt-0.5">★</span>
+                      <span>Your focus logs are active: You completed {totalSessionsCompleted} interval{totalSessionsCompleted !== 1 ? 's' : ''} for a total of {totalMinutesFocused} focused minutes! We are adjusting our forecast models.</span>
+                    </li>
+                  );
+                }
+                return null;
+              })()}
               <li className="flex items-start gap-2.5">
                 <span className="text-[#75162D] select-none font-semibold mt-0.5">&bull;</span>
                 <span>We notice your projects often unfold about 20% longer than early thoughts. We've paced tasks to keep your deadlines balanced.</span>

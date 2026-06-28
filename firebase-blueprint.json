@@ -41,6 +41,23 @@
         "riskReason": { "type": "string", "description": "Explanation for predicted risk level" }
       },
       "required": ["id", "userId", "name", "deadline", "priority", "completed"]
+    },
+    "focus_event": {
+      "title": "Focus Event",
+      "description": "Recorded focus session completion events, task completions, restarts, and focus durations.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique event ID" },
+        "userId": { "type": "string", "description": "Owner user ID" },
+        "taskId": { "type": "string", "description": "Task ID associated" },
+        "taskName": { "type": "string", "description": "Name of the task" },
+        "subtaskId": { "type": "string", "description": "Optional subtask ID" },
+        "subtaskName": { "type": "string", "description": "Optional subtask name" },
+        "eventType": { "type": "string", "enum": ["start_session", "complete_step", "restart_step", "complete_task", "skip_step"], "description": "Type of focus event" },
+        "durationMinutes": { "type": "number", "description": "Focused duration in minutes" },
+        "timestamp": { "type": "string", "format": "date-time", "description": "Event timestamp" }
+      },
+      "required": ["id", "userId", "taskId", "taskName", "eventType", "durationMinutes", "timestamp"]
     }
   },
   "firestore": {
@@ -51,6 +68,10 @@
     "/tasks/{taskId}": {
       "schema": "task",
       "description": "Root collection storing tasks for all users"
+    },
+    "/focus_events/{eventId}": {
+      "schema": "focus_event",
+      "description": "Collection of user focus session events for learning and analytics"
     }
   }
 }

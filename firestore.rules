@@ -49,6 +49,24 @@ service cloud.firestore {
              (!('completedAt' in data) || (data.completedAt is string && data.completedAt.size() <= 128));
     }
 
+    function isValidFocusEvent(data) {
+      return data.id is string && data.id.size() <= 128 &&
+             data.userId is string && data.userId.size() <= 128 &&
+             data.taskId is string && data.taskId.size() <= 128 &&
+             data.taskName is string && data.taskName.size() <= 256 &&
+             (!('subtaskId' in data) || (data.subtaskId is string && data.subtaskId.size() <= 128)) &&
+             (!('subtaskName' in data) || (data.subtaskName is string && data.subtaskName.size() <= 256)) &&
+             data.eventType is string && (
+               data.eventType == 'start_session' || 
+               data.eventType == 'complete_step' || 
+               data.eventType == 'restart_step' || 
+               data.eventType == 'complete_task' || 
+               data.eventType == 'skip_step'
+             ) &&
+             data.durationMinutes is number &&
+             data.timestamp is string && data.timestamp.size() <= 128;
+    }
+
     // User profile rules
     match /users/{userId} {
       allow read: if isSignedIn() && request.auth.uid == userId;
@@ -67,6 +85,19 @@ service cloud.firestore {
                       (resource == null || resource.data.userId == request.auth.uid) && 
                       request.resource.data.userId == request.auth.uid &&
                       isValidTask(request.resource.data);
+      allow delete: if isSignedIn() && (resource == null || resource.data.userId == request.auth.uid);
+    }
+
+    // Focus session analytics rules: Owner access only
+    match /focus_events/{eventId} {
+      allow read: if isSignedIn() && (resource == null || resource.data.userId == request.auth.uid);
+      allow create: if isSignedIn() && isValidId(eventId) && 
+                      request.resource.data.userId == request.auth.uid && 
+                      isValidFocusEvent(request.resource.data);
+      allow update: if isSignedIn() && isValidId(eventId) && 
+                      (resource == null || resource.data.userId == request.auth.uid) && 
+                      request.resource.data.userId == request.auth.uid &&
+                      isValidFocusEvent(request.resource.data);
       allow delete: if isSignedIn() && (resource == null || resource.data.userId == request.auth.uid);
     }
     

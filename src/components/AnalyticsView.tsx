@@ -10,7 +10,7 @@ import {
 } from "recharts";
 
 export const AnalyticsView: React.FC = () => {
-  const { tasks, forecastDays, forecastSummary } = useApp();
+  const { tasks, forecastDays, forecastSummary, focusEvents = [] } = useApp();
 
   const completedTasks = tasks.filter(t => t.completed);
   
@@ -230,6 +230,88 @@ export const AnalyticsView: React.FC = () => {
           )}
         </div>
 
+      </div>
+
+      {/* Focus Session Analytics */}
+      <div className="rounded-[10px] border border-[#DCCFBE] bg-[#FFFDF9] p-7 shadow-xs space-y-6 transition-colors duration-300">
+        <div className="space-y-1">
+          <h3 className="text-lg font-semibold text-[#2D2520] flex items-center gap-2.5 font-display">
+            <Clock className="h-5 w-5 text-[#75162D]" />
+            Focus Session Analytics
+          </h3>
+          <p className="text-xs text-[#6A625B] font-light leading-relaxed">
+            Methodical insights parsed from your actual focus sessions, completed subtasks, and restart history.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="border border-[#DCCFBE]/40 rounded-[10px] p-4 bg-[#F8F3EC]/30 text-center">
+            <span className="text-[10px] font-mono text-[#6A625B] uppercase tracking-wider block">Total Focus Time</span>
+            <span className="text-2xl font-bold text-[#75162D] font-sans mt-1 block">
+              {focusEvents.filter(e => e.eventType === 'complete_step').reduce((acc, e) => acc + e.durationMinutes, 0)} min
+            </span>
+          </div>
+
+          <div className="border border-[#DCCFBE]/40 rounded-[10px] p-4 bg-[#F8F3EC]/30 text-center">
+            <span className="text-[10px] font-mono text-[#6A625B] uppercase tracking-wider block">Intervals Cleared</span>
+            <span className="text-2xl font-bold text-[#75162D] font-sans mt-1 block">
+              {focusEvents.filter(e => e.eventType === 'complete_step').length}
+            </span>
+          </div>
+
+          <div className="border border-[#DCCFBE]/40 rounded-[10px] p-4 bg-[#F8F3EC]/30 text-center">
+            <span className="text-[10px] font-mono text-[#6A625B] uppercase tracking-wider block">Pacing Restarts</span>
+            <span className="text-2xl font-bold text-[#75162D] font-sans mt-1 block">
+              {focusEvents.filter(e => e.eventType === 'restart_step').length}
+            </span>
+          </div>
+
+          <div className="border border-[#DCCFBE]/40 rounded-[10px] p-4 bg-[#F8F3EC]/30 text-center">
+            <span className="text-[10px] font-mono text-[#6A625B] uppercase tracking-wider block">Completion Rate</span>
+            <span className="text-2xl font-bold text-[#75162D] font-sans mt-1 block">
+              {focusEvents.filter(e => e.eventType === 'start_session').length > 0 
+                ? `${Math.round((focusEvents.filter(e => e.eventType === 'complete_step').length / focusEvents.filter(e => e.eventType === 'start_session').length) * 100)}%` 
+                : "100%"}
+            </span>
+          </div>
+        </div>
+
+        {/* Focus Events log table */}
+        {focusEvents.length > 0 && (
+          <div className="border border-[#DCCFBE]/40 rounded-[10px] overflow-hidden">
+            <div className="bg-[#F8F3EC]/50 px-4 py-2 text-[10px] font-mono font-bold uppercase text-[#6A625B] tracking-wider border-b border-[#DCCFBE]/40">
+              Focus Activity Log (Latest Events)
+            </div>
+            <div className="max-h-48 overflow-y-auto divide-y divide-[#DCCFBE]/20 text-xs">
+              {[...focusEvents].reverse().slice(0, 10).map((event) => (
+                <div key={event.id} className="p-3 flex items-center justify-between gap-3 text-[#2D2520]">
+                  <div className="flex items-center gap-2.5">
+                    <span className={`inline-block w-2 h-2 rounded-full ${
+                      event.eventType === 'complete_step' 
+                        ? 'bg-[#5F7358]' 
+                        : event.eventType === 'restart_step' 
+                        ? 'bg-[#A06A3C]' 
+                        : event.eventType === 'complete_task'
+                        ? 'bg-blue-500'
+                        : 'bg-[#75162D]'
+                    }`} />
+                    <div>
+                      <span className="font-semibold text-xs capitalize">
+                        {event.eventType.replace('_', ' ')}: 
+                      </span>
+                      <span className="text-xs text-[#6A625B] ml-1">
+                        {event.subtaskName ? `"${event.subtaskName}" under ` : ""} "{event.taskName}"
+                      </span>
+                    </div>
+                  </div>
+                  <div className="text-right shrink-0 font-mono text-[10px] text-[#6A625B]">
+                    {event.durationMinutes > 0 ? `${event.durationMinutes}m` : ""}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* 4. Planning Patterns Grid */}
