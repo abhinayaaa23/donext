@@ -68,11 +68,10 @@ DoNext was designed with a calm, editorial-inspired interface focused on reducin
 
 ## Built With
 
-* Google AI Studio
-* Gemini
-* React
-* TypeScript
-* Responsive Web Design
+- React & TypeScript
+- Gemini for intelligent planning and task decomposition
+- Google AI Studio for rapid prototyping and AI integration
+- Responsive and mobile-first design principles
 
 ---
 
