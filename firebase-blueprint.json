@@ -1,0 +1,56 @@
+{
+  "entities": {
+    "user": {
+      "title": "User Profile",
+      "description": "User profile information managed under persistent sessions.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Unique user ID" },
+        "email": { "type": "string", "description": "User email address" },
+        "displayName": { "type": "string", "description": "User display name" },
+        "photoURL": { "type": "string", "description": "User profile photo URL" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Profile creation timestamp" }
+      },
+      "required": ["uid", "email"]
+    },
+    "task": {
+      "title": "Task",
+      "description": "Tasks created by users with predicted deadline risks and workload forecasts.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique task ID" },
+        "userId": { "type": "string", "description": "Owner user ID" },
+        "name": { "type": "string", "description": "Name of the task" },
+        "description": { "type": "string", "description": "Description of the task" },
+        "deadline": { "type": "string", "format": "date", "description": "Due date" },
+        "priority": { "type": "string", "enum": ["low", "medium", "high"], "description": "Task priority level" },
+        "estimatedHours": { "type": "number", "description": "User estimated time or AI estimate" },
+        "aiEstimateHours": { "type": "number", "description": "AI predicted effort estimate" },
+        "aiEstimateReasoning": { "type": "string", "description": "AI explanation of its estimate" },
+        "actualHours": { "type": "number", "description": "Actual hours spent by user to complete" },
+        "completed": { "type": "boolean", "description": "Task completion state" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Task creation date-time" },
+        "completedAt": { "type": "string", "format": "date-time", "description": "Task completion date-time" },
+        "isRecurring": { "type": "boolean", "description": "Whether task is recurring" },
+        "recurrencePattern": { "type": "string", "enum": ["none", "daily", "weekly", "monthly"], "description": "Recurrence pattern" },
+        "subtasks": {
+          "type": "array",
+          "description": "Decomposed steps for the task"
+        },
+        "riskLevel": { "type": "string", "enum": ["Low", "Medium", "High"], "description": "Predicted risk of missing deadline" },
+        "riskReason": { "type": "string", "description": "Explanation for predicted risk level" }
+      },
+      "required": ["id", "userId", "name", "deadline", "priority", "completed"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "user",
+      "description": "Collection of user profile settings"
+    },
+    "/tasks/{taskId}": {
+      "schema": "task",
+      "description": "Root collection storing tasks for all users"
+    }
+  }
+}

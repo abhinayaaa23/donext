@@ -1,0 +1,6 @@
+{
+  "name": "DoNext",
+  "description": "An AI-powered productivity companion that forecasts workload pressure, predicts deadline risks, decomposes tasks, and recommends the best next actions.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
