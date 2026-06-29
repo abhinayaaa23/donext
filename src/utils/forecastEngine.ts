@@ -101,7 +101,7 @@ export function generateWorkloadForecast(tasks: Task[], todayStr: string): { day
     });
   }
 
-  // Distribute estimated remaining effort of active tasks linearly across the days leading up to their deadlines
+  // Distribute estimated remaining effort of active tasks safely across available days until task deadlines
   activeTasks.forEach(task => {
     const daysLeft = getDaysRemaining(task.deadline, todayStr);
     const totalSubtasks = task.subtasks.length;
@@ -112,24 +112,61 @@ export function generateWorkloadForecast(tasks: Task[], todayStr: string): { day
       remainingHours = remainingHours * ((totalSubtasks - completedSubtasks) / totalSubtasks);
     }
 
+    // Clamp remainingHours to positive finite value to avoid any NaN/Infinity/negative hours
+    remainingHours = Math.max(0, remainingHours);
+    if (!isFinite(remainingHours) || isNaN(remainingHours)) {
+      remainingHours = 0;
+    }
+
     if (daysLeft <= 0) {
-      // If overdue or due today, place all effort on "Today"
+      // If overdue or due today, place all effort on "Today" (index 0)
       days[0].estimatedHours += remainingHours;
       days[0].taskCount += 1;
     } else {
-      // Distribute work over the days between today (index 0) and the deadline
-      const span = Math.min(daysLeft + 1, 5); // caps window at 5 days forecast
-      const dailyContribution = remainingHours / span;
+      // Distribute work over the actual available days up to the deadline
+      const totalDaysToDeadline = daysLeft + 1;
+      const weights: number[] = [];
+      let totalWeight = 0;
 
-      for (let j = 0; j < span; j++) {
-        days[j].estimatedHours += dailyContribution;
-        days[j].taskCount += 1;
+      for (let j = 0; j < totalDaysToDeadline; j++) {
+        let w = 1.0;
+        if (task.priority === "high") {
+          // High Priority: Front-load since it is urgent, so earlier days get more weight
+          w = Math.pow(totalDaysToDeadline - j, 1.2);
+        } else if (task.priority === "low") {
+          // Low Priority: Back-load since it can be deferred, so later days close to deadline get more weight
+          w = 0.5 + Math.pow(j + 1, 1.5);
+        } else {
+          // Medium Priority: Moderate build-up towards the deadline
+          w = 1.0 + (j * 0.3);
+        }
+        weights.push(w);
+        totalWeight += w;
+      }
+
+      if (totalWeight <= 0) totalWeight = 1.0;
+
+      // Distribute the remaining effort using the calculated weights
+      for (let j = 0; j < totalDaysToDeadline; j++) {
+        if (j < 5) {
+          const share = (weights[j] / totalWeight) * remainingHours;
+          if (isFinite(share) && !isNaN(share) && share > 0) {
+            days[j].estimatedHours += share;
+            days[j].taskCount += 1;
+          }
+        }
       }
     }
   });
 
-  // Determine workload status for each day
+  // Determine workload status for each day, keeping values clean and bounded
   days.forEach(day => {
+    // Round to 1 decimal place to avoid float precision quirks, and clamp to positive
+    day.estimatedHours = Math.max(0, Math.round(day.estimatedHours * 10) / 10);
+    if (!isFinite(day.estimatedHours) || isNaN(day.estimatedHours)) {
+      day.estimatedHours = 0;
+    }
+
     if (day.estimatedHours > 5.0) {
       day.status = "High";
     } else if (day.estimatedHours > 2.0) {

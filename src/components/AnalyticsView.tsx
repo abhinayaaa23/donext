@@ -14,36 +14,67 @@ export const AnalyticsView: React.FC = () => {
 
   const completedTasks = tasks.filter(t => t.completed);
   
-  // Calculate estimation statistics
-  const estimationData = completedTasks.map(t => ({
-    name: t.name.length > 12 ? t.name.substring(0, 12) + "..." : t.name,
-    estimated: t.estimatedHours || 3,
-    actual: t.actualHours || (t.estimatedHours ? t.estimatedHours * 1.25 : 4)
-  }));
+  // Calculate estimation statistics safely without NaN or infinity
+  const estimationData = completedTasks.map(t => {
+    const estimated = Math.max(0, t.estimatedHours || 3);
+    const actual = Math.max(0, t.actualHours || (t.estimatedHours ? t.estimatedHours * 1.25 : 4));
+    return {
+      name: t.name.length > 12 ? t.name.substring(0, 12) + "..." : t.name,
+      estimated: isFinite(estimated) && !isNaN(estimated) ? estimated : 3,
+      actual: isFinite(actual) && !isNaN(actual) ? actual : 4
+    };
+  });
 
-  // Learning Insights calculation
+  // Learning Insights calculation safely
   let underestimateFactor = 1.25;
   if (completedTasks.length > 0) {
     let totalEstimated = 0;
     let totalActual = 0;
     completedTasks.forEach(t => {
-      totalEstimated += t.estimatedHours || 3;
-      totalActual += t.actualHours || (t.estimatedHours ? t.estimatedHours * 1.25 : 4);
+      const est = Math.max(0, t.estimatedHours || 3);
+      const act = Math.max(0, t.actualHours || (t.estimatedHours ? t.estimatedHours * 1.25 : 4));
+      totalEstimated += isFinite(est) && !isNaN(est) ? est : 3;
+      totalActual += isFinite(act) && !isNaN(act) ? act : 4;
     });
     if (totalEstimated > 0) {
-      underestimateFactor = parseFloat((totalActual / totalEstimated).toFixed(2));
+      const factor = totalActual / totalEstimated;
+      underestimateFactor = isFinite(factor) && !isNaN(factor) ? parseFloat(factor.toFixed(2)) : 1.25;
     }
   }
 
-  // Productivity trend data
-  const monthlyCompletionTrend = [
-    { month: "Jan", completed: 8, goal: 10 },
-    { month: "Feb", completed: 11, goal: 12 },
-    { month: "Mar", completed: 15, goal: 15 },
-    { month: "Apr", completed: 12, goal: 14 },
-    { month: "May", completed: 18, goal: 16 },
-    { month: "Jun", completed: completedTasks.length + 5, goal: 18 }
-  ];
+  // Productivity trend data generated dynamically from actual completed tasks
+  const getMonthlyCompletionTrend = () => {
+    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const trend = [];
+    
+    // Generate actual past 6 months dynamically based on current local date
+    const today = new Date();
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
+      const year = d.getFullYear();
+      const monthIdx = d.getMonth();
+      const monthLabel = months[monthIdx];
+      
+      // Count actual completed tasks for this month & year
+      const completedCount = tasks.filter(t => {
+        if (!t.completed) return false;
+        const compDateStr = t.completedAt || t.deadline || t.createdAt;
+        if (!compDateStr) return false;
+        
+        const compDate = new Date(compDateStr);
+        return compDate.getFullYear() === year && compDate.getMonth() === monthIdx;
+      }).length;
+      
+      trend.push({
+        month: monthLabel,
+        completed: completedCount,
+        goal: 10 // realistic monthly baseline target
+      });
+    }
+    return trend;
+  };
+
+  const monthlyCompletionTrend = getMonthlyCompletionTrend();
 
   const labelColor = "#6A625B";
   const tooltipBg = "#FFFDF9";
@@ -124,29 +155,38 @@ export const AnalyticsView: React.FC = () => {
 
         {/* Recharts Area Forecast Chart */}
         <div className="h-48 w-full pt-2">
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={forecastDays} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
-              <defs>
-                <linearGradient id="colorHours" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#75162D" stopOpacity={0.25}/>
-                  <stop offset="95%" stopColor="#75162D" stopOpacity={0.0}/>
-                </linearGradient>
-              </defs>
-              <XAxis dataKey="dayName" stroke={labelColor} fontSize={11} tickLine={false} />
-              <YAxis stroke={labelColor} fontSize={11} tickLine={false} />
-              <Tooltip 
-                contentStyle={{ 
-                  borderRadius: "10px", 
-                  border: `1px solid ${tooltipBorder}`, 
-                  backgroundColor: tooltipBg, 
-                  fontSize: "11px",
-                  color: tooltipText 
-                }}
-                labelClassName="font-semibold text-[#2D2520]"
-              />
-              <Area type="monotone" dataKey="estimatedHours" name="Workload Hours" stroke="#75162D" strokeWidth={2.5} fillOpacity={1} fill="url(#colorHours)" />
-            </AreaChart>
-          </ResponsiveContainer>
+          {tasks.filter(t => !t.completed).length > 0 ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={forecastDays} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="colorHours" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#75162D" stopOpacity={0.25}/>
+                    <stop offset="95%" stopColor="#75162D" stopOpacity={0.0}/>
+                  </linearGradient>
+                </defs>
+                <XAxis dataKey="dayName" stroke={labelColor} fontSize={11} tickLine={false} />
+                <YAxis stroke={labelColor} fontSize={11} tickLine={false} />
+                <Tooltip 
+                  contentStyle={{ 
+                    borderRadius: "10px", 
+                    border: `1px solid ${tooltipBorder}`, 
+                    backgroundColor: tooltipBg, 
+                    fontSize: "11px",
+                    color: tooltipText 
+                  }}
+                  labelClassName="font-semibold text-[#2D2520]"
+                />
+                <Area type="monotone" dataKey="estimatedHours" name="Workload Hours" stroke="#75162D" strokeWidth={2.5} fillOpacity={1} fill="url(#colorHours)" />
+              </AreaChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="h-full w-full flex flex-col items-center justify-center text-center border border-dashed border-[#DCCFBE]/50 rounded-[10px] bg-[#F8F3EC]/10 p-4">
+              <AlertCircle className="h-8 w-8 text-[#DCCFBE]/80 mb-2" />
+              <p className="text-xs text-[#6A625B] font-light italic">
+                Complete more tasks to unlock insights.
+              </p>
+            </div>
+          )}
         </div>
       </div>
 
@@ -166,24 +206,33 @@ export const AnalyticsView: React.FC = () => {
           </div>
 
           <div className="h-60 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={monthlyCompletionTrend}>
-                <XAxis dataKey="month" stroke={labelColor} fontSize={11} tickLine={false} />
-                <YAxis stroke={labelColor} fontSize={11} tickLine={false} />
-                <Tooltip 
-                  contentStyle={{ 
-                    borderRadius: "10px", 
-                    border: `1px solid ${tooltipBorder}`, 
-                    backgroundColor: tooltipBg, 
-                    fontSize: "11px",
-                    color: tooltipText 
-                  }}
-                />
-                <Legend verticalAlign="top" height={36} iconSize={10} wrapperStyle={{ fontSize: "11px", color: "#6A625B" }} />
-                <Bar dataKey="completed" name="Completed Tasks" fill="#75162D" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="goal" name="Monthly Target" fill="#E8D9C1" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+            {tasks.filter(t => t.completed).length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={monthlyCompletionTrend}>
+                  <XAxis dataKey="month" stroke={labelColor} fontSize={11} tickLine={false} />
+                  <YAxis stroke={labelColor} fontSize={11} tickLine={false} />
+                  <Tooltip 
+                    contentStyle={{ 
+                      borderRadius: "10px", 
+                      border: `1px solid ${tooltipBorder}`, 
+                      backgroundColor: tooltipBg, 
+                      fontSize: "11px",
+                      color: tooltipText 
+                    }}
+                  />
+                  <Legend verticalAlign="top" height={36} iconSize={10} wrapperStyle={{ fontSize: "11px", color: "#6A625B" }} />
+                  <Bar dataKey="completed" name="Completed Tasks" fill="#75162D" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="goal" name="Monthly Target" fill="#E8D9C1" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-full w-full flex flex-col items-center justify-center text-center border border-dashed border-[#DCCFBE]/50 rounded-[10px] bg-[#F8F3EC]/10 p-4">
+                <AlertCircle className="h-8 w-8 text-[#DCCFBE]/80 mb-2" />
+                <p className="text-xs text-[#6A625B] font-light italic">
+                  Complete more tasks to unlock insights.
+                </p>
+              </div>
+            )}
           </div>
         </div>
 
@@ -221,10 +270,10 @@ export const AnalyticsView: React.FC = () => {
               </ResponsiveContainer>
             </div>
           ) : (
-            <div className="h-60 flex flex-col items-center justify-center text-center">
-              <AlertCircle className="h-10 w-10 text-[#DCCFBE] mb-2.5" />
-              <p className="text-xs text-[#6A625B] font-light max-w-xs leading-relaxed italic">
-                Complete tasks in the dashboard to view your personalized estimate calibration metrics.
+            <div className="h-60 flex flex-col items-center justify-center text-center border border-dashed border-[#DCCFBE]/50 rounded-[10px] bg-[#F8F3EC]/10 p-4">
+              <AlertCircle className="h-8 w-8 text-[#DCCFBE]/80 mb-2.5" />
+              <p className="text-xs text-[#6A625B] font-light max-w-xs leading-relaxed italic text-center">
+                Complete more tasks to unlock insights.
               </p>
             </div>
           )}
@@ -268,10 +317,10 @@ export const AnalyticsView: React.FC = () => {
 
           <div className="border border-[#DCCFBE]/40 rounded-[10px] p-4 bg-[#F8F3EC]/30 text-center">
             <span className="text-[10px] font-mono text-[#6A625B] uppercase tracking-wider block">Completion Rate</span>
-            <span className="text-2xl font-bold text-[#75162D] font-sans mt-1 block">
-              {focusEvents.filter(e => e.eventType === 'start_session').length > 0 
-                ? `${Math.round((focusEvents.filter(e => e.eventType === 'complete_step').length / focusEvents.filter(e => e.eventType === 'start_session').length) * 100)}%` 
-                : "100%"}
+            <span className={`font-bold text-[#75162D] font-sans mt-1 block ${tasks.length > 0 ? "text-2xl" : "text-xs"}`}>
+              {tasks.length > 0 
+                ? `${Math.min(100, Math.max(0, Math.round((completedTasks.length / tasks.length) * 100)))}%` 
+                : "Not enough data yet"}
             </span>
           </div>
         </div>
