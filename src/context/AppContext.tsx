@@ -72,6 +72,35 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
   throw new Error(JSON.stringify(errInfo));
 }
 
+export function sanitizeForFirestore<T>(data: T, path: string = ""): T {
+  if (data === undefined) {
+    console.warn(`[Firestore Sanitizer] WARNING: Found undefined value at path: "${path}". Converting to null.`);
+    return null as any;
+  }
+  if (data === null) {
+    return null as any;
+  }
+  if (Array.isArray(data)) {
+    return data.map((item, index) => sanitizeForFirestore(item, `${path}[${index}]`)) as any;
+  }
+  if (typeof data === "object") {
+    if (data.constructor && data.constructor.name !== "Object") {
+      return data;
+    }
+    const clean: any = {};
+    for (const key of Object.keys(data)) {
+      const val = (data as any)[key];
+      if (val === undefined) {
+        console.warn(`[Firestore Sanitizer] WARNING: Found undefined property at path: "${path ? path + "." + key : key}". Omitting from payload.`);
+      } else {
+        clean[key] = sanitizeForFirestore(val, path ? `${path}.${key}` : key);
+      }
+    }
+    return clean;
+  }
+  return data;
+}
+
 interface AppContextType {
   user: User | null;
   loadingAuth: boolean;
@@ -165,22 +194,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         fetchedTasks.push(doc.data() as Task);
       });
       
-      // If user has zero tasks in database, initialize them with mock tasks
-      if (fetchedTasks.length === 0) {
-        const initialTasks = getDefaultMockTasks(user.uid);
-        initialTasks.forEach(async (t) => {
-          try {
-            await setDoc(doc(db, "tasks", t.id), t);
-          } catch (error) {
-            handleFirestoreError(error, OperationType.WRITE, `tasks/${t.id}`);
-          }
-        });
-        setTasks(initialTasks);
-      } else {
-        // Sort by deadline, completed state, priority
-        fetchedTasks.sort((a, b) => new Date(a.deadline).getTime() - new Date(b.deadline).getTime());
-        setTasks(fetchedTasks);
-      }
+      // Sort by deadline, completed state, priority
+      fetchedTasks.sort((a, b) => new Date(a.deadline).getTime() - new Date(b.deadline).getTime());
+      setTasks(fetchedTasks);
       setLoadingTasks(false);
     }, (error) => {
       console.error("Error syncing tasks:", error);
@@ -247,7 +263,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     if (user) {
       try {
-        await setDoc(doc(db, "focus_events", id), newEvent);
+        const cleanedEvent = sanitizeForFirestore(newEvent, `focus_events/${id}`);
+        await setDoc(doc(db, "focus_events", id), cleanedEvent);
       } catch (err) {
         console.error("Error writing focus event to firestore:", err);
       }
@@ -301,12 +318,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       // Create user profile document in users collection
       const userRef = doc(db, "users", userCredential.user.uid);
       try {
-        await setDoc(userRef, {
+        const cleanedUserData = sanitizeForFirestore({
           uid: userCredential.user.uid,
           email: userCredential.user.email,
           displayName: displayName,
           createdAt: new Date().toISOString()
-        });
+        }, `users/${userCredential.user.uid}`);
+        await setDoc(userRef, cleanedUserData);
       } catch (err) {
         handleFirestoreError(err, OperationType.WRITE, `users/${userCredential.user.uid}`);
       }
@@ -351,7 +369,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     if (user) {
       try {
-        await setDoc(doc(db, "tasks", taskId), newTask);
+        const cleanedTask = sanitizeForFirestore(newTask, `tasks/${taskId}`);
+        await setDoc(doc(db, "tasks", taskId), cleanedTask);
       } catch (err) {
         console.error("Error saving task to Firestore:", err);
         handleFirestoreError(err, OperationType.WRITE, `tasks/${taskId}`);
@@ -386,7 +405,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         const taskRef = doc(db, "tasks", taskId);
         const currentTask = updatedTasks.find(t => t.id === taskId);
         if (currentTask) {
-          await setDoc(taskRef, currentTask, { merge: true });
+          const cleanedTask = sanitizeForFirestore(currentTask, `tasks/${taskId}`);
+          await setDoc(taskRef, cleanedTask, { merge: true });
         }
       } catch (err) {
         console.error("Error updating task in Firestore:", err);

@@ -44,6 +44,14 @@ export const DashboardView: React.FC = () => {
   const [stepCompletedFeedback, setStepCompletedFeedback] = useState(false);
   const [transitionMessage, setTransitionMessage] = useState<string | null>(null);
 
+  const handleDeleteTask = (taskId: string) => {
+    if (timerTaskId === taskId) {
+      setIsTimerActive(false);
+      setTimerTaskId("");
+    }
+    deleteTask(taskId);
+  };
+
   // Synchronize timer countdown
   useEffect(() => {
     let interval: any = null;
@@ -727,12 +735,20 @@ export const DashboardView: React.FC = () => {
 
         {/* Compact Task List */}
         <div className="divide-y divide-[#DCCFBE]/30 space-y-3.5">
-          {filteredTasks.length === 0 ? (
+          {tasks.length === 0 ? (
+            <div className="text-center py-12">
+              <HelpCircle className="mx-auto h-12 w-12 text-[#DCCFBE]/70 mb-3" />
+              <h4 className="text-sm font-semibold text-[#2D2520] font-sans">No active tasks yet</h4>
+              <p className="text-xs text-[#6A625B] max-w-sm mx-auto mt-1 font-light">
+                Create your first task to get started.
+              </p>
+            </div>
+          ) : filteredTasks.length === 0 ? (
             <div className="text-center py-12">
               <HelpCircle className="mx-auto h-12 w-12 text-[#DCCFBE]/70 mb-3" />
               <h4 className="text-sm font-semibold text-[#2D2520] font-sans">No tasks in view</h4>
               <p className="text-xs text-[#6A625B] max-w-sm mx-auto mt-1 font-light">
-                Create a task to forecast workload bottlenecks and design a milestone plan.
+                No tasks match the selected filter.
               </p>
             </div>
           ) : (
@@ -858,7 +874,7 @@ export const DashboardView: React.FC = () => {
                       </button>
                       
                       <button
-                        onClick={() => deleteTask(task.id)}
+                        onClick={() => handleDeleteTask(task.id)}
                         title="Delete Task"
                         className="rounded-[8px] border border-[#DCCFBE] hover:bg-[#75162D]/10 text-[#6A625B] hover:text-[#75162D] p-2 transition-colors cursor-pointer shrink-0"
                       >
@@ -997,7 +1013,7 @@ export const DashboardView: React.FC = () => {
                       </button>
                       
                       <button
-                        onClick={() => deleteTask(task.id)}
+                        onClick={() => handleDeleteTask(task.id)}
                         className="flex-1 flex items-center justify-center gap-2 rounded-[8px] border border-[#DCCFBE] hover:border-[#75162D]/40 bg-[#FFFDF9] hover:bg-[#75162D]/5 text-[#6A625B] hover:text-[#75162D] py-2.5 text-xs font-medium transition-colors cursor-pointer"
                       >
                         <Trash2 className="h-3.5 w-3.5" />

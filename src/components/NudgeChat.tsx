@@ -46,7 +46,7 @@ export const NudgeChat: React.FC = () => {
         {isOpen ? (
           <X className="h-4.5 w-4.5" />
         ) : (
-          <NudgeIcon className="h-5 w-5 text-[#E8D9C1] animate-pulse" />
+          <NudgeIcon className="h-5 w-5 text-[#E8D9C1]" />
         )}
         <span className="text-xs font-semibold tracking-wide hidden md:inline">{isOpen ? "Close Nudge" : "Ask Nudge"}</span>
       </button>

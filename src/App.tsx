@@ -138,7 +138,7 @@ function MainAppContent() {
               >
                 <Bell className="h-4 w-4" />
                 {unreadNotifs.length > 0 && (
-                  <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-[#75162D] text-[8px] font-bold text-[#F5EFE6] ring-2 ring-[#FFFDF9] animate-pulse">
+                  <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-[#75162D] text-[8px] font-bold text-[#F5EFE6] ring-2 ring-[#FFFDF9]">
                     {unreadNotifs.length}
                   </span>
                 )}
