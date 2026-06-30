@@ -30,41 +30,23 @@ DoNext was built to bridge the gap between planning and execution.
 
 ## Key Features
 
-### AI-Powered Effort Estimation
+- **AI-Powered Effort Estimation** – Uses Gemini to estimate the time and effort required for tasks.
 
-Uses Gemini to estimate the time and effort required for tasks.
+- **Task Decomposition** – Breaks complex goals into smaller, actionable subtasks.
 
-### Task Decomposition
+- **Workload Forecasting** – Predicts future workload distribution to help users avoid last-minute rushes.
 
-Breaks complex goals into smaller, actionable subtasks.
+- **Smart Prioritization** – Helps users identify the most important tasks based on urgency, effort, and deadlines.
 
-### Workload Forecasting
+- **Nudge AI Assistant** – Provides contextual productivity guidance and planning recommendations.
 
-Predicts future workload distribution to help users avoid last-minute rushes.
+- **Focus Sessions** – Supports deep work through structured focus tracking.
 
-### Smart Prioritization
+- **Productivity Insights** – Generates analytics and behavioral insights based on user activity.
 
-Helps users identify the most important tasks based on urgency, effort, and deadlines.
+- **Secure Authentication** – Google Sign-In powered by Firebase Authentication.
 
-### Nudge AI Assistant
-
-Provides contextual productivity guidance and planning recommendations.
-
-### Focus Sessions
-
-Supports deep work through dedicated focus tracking.
-
-### Productivity Insights
-
-Generates analytics and behavioral insights based on user activity.
-
-### Secure Authentication
-
-Google Sign-In powered by Firebase Authentication.
-
-### Cloud-Synced Data
-
-Task and productivity data stored securely using Cloud Firestore.
+- **Cloud-Synced Data** – Task and productivity data stored securely using Cloud Firestore.
 
 ---
 
@@ -156,9 +138,13 @@ AI Features
 
 ![Task Decomposition](images/task-decomposition.png)
 
-### Nudge AI Assistant
+### Focus Session
 
-![Nudge AI Assistant](images/nudge-assistant.png)
+![Focus Session](images/focus-session.png)
+
+### Workload Forecasting
+
+![Workload Forecasting](images/workload-forecast.png)
 
 ### Productivity Insights
 
