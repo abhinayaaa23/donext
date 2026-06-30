@@ -175,6 +175,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         // Load default mock tasks for guest/offline view
         setTasks(getDefaultMockTasks());
         setLoadingTasks(false);
+      } else {
+        // Clear tasks immediately so brand-new/authenticated users start clean and loading state is correct
+        setTasks([]);
+        setLoadingTasks(true);
       }
     });
     return unsubscribe;
@@ -645,6 +649,15 @@ export const useApp = () => {
 
 // Default Tasks generator to feed mock experience
 function getDefaultMockTasks(userId = "guest"): Task[] {
+  // Disable demo data in production mode or for any authenticated user
+  const isProduction = 
+    (typeof process !== 'undefined' && process.env && process.env.NODE_ENV === 'production') || 
+    (typeof import.meta !== 'undefined' && (import.meta as any).env && (import.meta as any).env.PROD);
+
+  if (isProduction || userId !== "guest") {
+    return [];
+  }
+
   return [
     {
       id: "task_mock_1",

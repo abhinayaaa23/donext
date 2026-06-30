@@ -27,6 +27,26 @@ export const DashboardView: React.FC = () => {
   // Learning From You card expansion
   const [learningExpanded, setLearningExpanded] = useState(false);
 
+  // Data threshold calculations for consistent "Learning From You" validation
+  const completedTasks = tasks.filter(t => t.completed);
+  const completedTasksCount = completedTasks.length;
+  const completedFocusSessions = focusEvents.filter(e => e.eventType === 'complete_step' || e.eventType === 'complete_task').length;
+
+  const activityDates = new Set<string>();
+  tasks.forEach(t => {
+    if (t.createdAt) activityDates.add(t.createdAt.substring(0, 10));
+    if (t.completedAt) activityDates.add(t.completedAt.substring(0, 10));
+    if (t.deadline) activityDates.add(t.deadline.substring(0, 10));
+  });
+  focusEvents.forEach(e => {
+    if (e.timestamp) {
+      activityDates.add(e.timestamp.substring(0, 10));
+    }
+  });
+  const activityDaysCount = activityDates.size;
+
+  const hasSufficientData = completedTasksCount >= 3 || completedFocusSessions >= 5 || activityDaysCount >= 7;
+
   // New Step Inline Insertion States
   const [insertingAfterIndex, setInsertingAfterIndex] = useState<number | null>(null);
   const [newStepName, setNewStepName] = useState("");
@@ -724,6 +744,7 @@ export const DashboardView: React.FC = () => {
 
             {/* Create Task Button */}
             <button
+              type="button"
               onClick={handleAddNewClick}
               className="rounded-[8px] bg-[#75162D] hover:bg-[#560B18] px-4.5 py-2.5 text-xs font-semibold text-[#F5EFE6] shadow-2xs flex items-center gap-1.5 cursor-pointer transition-all hover:-translate-y-0.5"
             >
@@ -736,11 +757,11 @@ export const DashboardView: React.FC = () => {
         {/* Compact Task List */}
         <div className="divide-y divide-[#DCCFBE]/30 space-y-3.5">
           {tasks.length === 0 ? (
-            <div className="text-center py-12">
-              <HelpCircle className="mx-auto h-12 w-12 text-[#DCCFBE]/70 mb-3" />
-              <h4 className="text-sm font-semibold text-[#2D2520] font-sans">No active tasks yet</h4>
-              <p className="text-xs text-[#6A625B] max-w-sm mx-auto mt-1 font-light">
-                Create your first task to get started.
+            <div className="text-center py-12 px-4 max-w-md mx-auto">
+              <CheckSquare className="mx-auto h-12 w-12 text-[#75162D] mb-4 opacity-80" />
+              <h4 className="text-base font-semibold text-[#2D2520] font-sans">Ready to Plan Your Next Win?</h4>
+              <p className="text-xs text-[#6A625B] mt-2 font-light leading-relaxed">
+                Create your first task and let DoNext estimate effort, build a plan, and forecast your workload.
               </p>
             </div>
           ) : filteredTasks.length === 0 ? (
@@ -1120,50 +1141,124 @@ export const DashboardView: React.FC = () => {
           </button>
         </div>
 
-        {/* Collapsed State */}
-        {!learningExpanded ? (
-          <p className="text-xs text-[#6A625B] font-light pl-7 leading-relaxed italic">
-            "We quietly schedule milestones, pace daily tasks, and help format focused work sessions to ensure your calendar retains enough room to think."
-          </p>
+        {hasSufficientData ? (
+          <>
+            {/* Collapsed State */}
+            {!learningExpanded ? (
+              <p className="text-xs text-[#6A625B] font-light pl-7 leading-relaxed italic animate-fadeIn">
+                "We quietly schedule milestones, pace daily tasks, and help format focused work sessions to ensure your calendar retains enough room to think."
+              </p>
+            ) : (
+              /* Expanded State */
+              <div className="pl-7 space-y-4 pt-1 animate-fadeIn">
+                <p className="text-xs text-[#2D2520] font-light leading-relaxed italic border-b border-[#DCCFBE]/40 pb-3">
+                  Observations gathered over the past month to aid your rhythm:
+                </p>
+                
+                <ul className="space-y-3 text-xs text-[#2D2520] font-light leading-relaxed">
+                  {(() => {
+                    const totalSessionsCompleted = focusEvents.filter((e: any) => e.eventType === 'complete_step').length;
+                    const totalMinutesFocused = focusEvents.filter((e: any) => e.eventType === 'complete_step').reduce((acc: number, e: any) => acc + e.durationMinutes, 0);
+                    if (totalSessionsCompleted > 0) {
+                      return (
+                        <li className="flex items-start gap-2.5 font-medium text-[#75162D]">
+                          <span className="text-[#5F7358] select-none font-semibold mt-0.5">★</span>
+                          <span>Your focus logs are active: You completed {totalSessionsCompleted} interval{totalSessionsCompleted !== 1 ? 's' : ''} for a total of {totalMinutesFocused} focused minutes! We are adjusting our forecast models.</span>
+                        </li>
+                      );
+                    }
+                    return null;
+                  })()}
+                  <li className="flex items-start gap-2.5">
+                    <span className="text-[#75162D] select-none font-semibold mt-0.5">&bull;</span>
+                    <span>We notice your projects often unfold about 20% longer than early thoughts. We've paced tasks to keep your deadlines balanced.</span>
+                  </li>
+                  <li className="flex items-start gap-2.5">
+                    <span className="text-[#75162D] select-none font-semibold mt-0.5">&bull;</span>
+                    <span>Tuesday usually carries your heaviest workload. Gently drifting minor milestones to early Monday keeps your week flowing evenly.</span>
+                  </li>
+                  <li className="flex items-start gap-2.5">
+                    <span className="text-[#75162D] select-none font-semibold mt-0.5">&bull;</span>
+                    <span>Morning focus blocks appear to be your most creative times. Beginning recommended DoNext sessions early helps protect your energy.</span>
+                  </li>
+                  <li className="flex items-start gap-2.5">
+                    <span className="text-[#75162D] select-none font-semibold mt-0.5">&bull;</span>
+                    <span>Subdividing ambitious tasks keeps momentum solid. Crafting custom step plans has consistently lowered overall scheduling stress.</span>
+                  </li>
+                </ul>
+              </div>
+            )}
+          </>
         ) : (
-          /* Expanded State */
-          <div className="pl-7 space-y-4 pt-1 animate-fadeIn">
-            <p className="text-xs text-[#2D2520] font-light leading-relaxed italic border-b border-[#DCCFBE]/40 pb-3">
-              Observations gathered over the past month to aid your rhythm:
-            </p>
-            
-            <ul className="space-y-3 text-xs text-[#2D2520] font-light leading-relaxed">
-              {(() => {
-                const totalSessionsCompleted = focusEvents.filter((e: any) => e.eventType === 'complete_step').length;
-                const totalMinutesFocused = focusEvents.filter((e: any) => e.eventType === 'complete_step').reduce((acc: number, e: any) => acc + e.durationMinutes, 0);
-                if (totalSessionsCompleted > 0) {
-                  return (
-                    <li className="flex items-start gap-2.5 font-medium text-[#75162D]">
-                      <span className="text-[#5F7358] select-none font-semibold mt-0.5">★</span>
-                      <span>Your focus logs are active: You completed {totalSessionsCompleted} interval{totalSessionsCompleted !== 1 ? 's' : ''} for a total of {totalMinutesFocused} focused minutes! We are adjusting our forecast models.</span>
-                    </li>
-                  );
-                }
-                return null;
-              })()}
-              <li className="flex items-start gap-2.5">
-                <span className="text-[#75162D] select-none font-semibold mt-0.5">&bull;</span>
-                <span>We notice your projects often unfold about 20% longer than early thoughts. We've paced tasks to keep your deadlines balanced.</span>
-              </li>
-              <li className="flex items-start gap-2.5">
-                <span className="text-[#75162D] select-none font-semibold mt-0.5">&bull;</span>
-                <span>Tuesday usually carries your heaviest workload. Gently drifting minor milestones to early Monday keeps your week flowing evenly.</span>
-              </li>
-              <li className="flex items-start gap-2.5">
-                <span className="text-[#75162D] select-none font-semibold mt-0.5">&bull;</span>
-                <span>Morning focus blocks appear to be your most creative times. Beginning recommended DoNext sessions early helps protect your energy.</span>
-              </li>
-              <li className="flex items-start gap-2.5">
-                <span className="text-[#75162D] select-none font-semibold mt-0.5">&bull;</span>
-                <span>Subdividing ambitious tasks keeps momentum solid. Crafting custom step plans has consistently lowered overall scheduling stress.</span>
-              </li>
-            </ul>
-          </div>
+          <>
+            {/* Collapsed State for insufficient data */}
+            {!learningExpanded ? (
+              <p className="text-xs text-[#6A625B] font-light pl-7 leading-relaxed italic animate-fadeIn">
+                "We're still learning how you work. Complete tasks, finish focus sessions, and use DoNext regularly to unlock personalized planning insights."
+              </p>
+            ) : (
+              /* Expanded State with Progress Indicators for insufficient data */
+              <div className="pl-7 space-y-4 pt-1 animate-fadeIn">
+                <p className="text-xs text-[#2D2520] font-light leading-relaxed italic border-b border-[#DCCFBE]/40 pb-3">
+                  We're still learning how you work. Complete tasks, finish focus sessions, and use DoNext regularly to unlock personalized planning insights.
+                </p>
+                
+                <div className="space-y-3.5 pt-1.5 max-w-md">
+                  <h4 className="text-xs font-semibold text-[#2D2520] tracking-wide uppercase font-sans">
+                    Progress to Unlock Insights
+                  </h4>
+
+                  {/* Completed Tasks Progress */}
+                  <div className="space-y-1">
+                    <div className="flex justify-between text-[11px]">
+                      <span className="text-[#6A625B] font-medium flex items-center gap-1">
+                        <Check className="h-3 w-3 text-[#75162D]" /> Completed Tasks
+                      </span>
+                      <span className="text-xs font-bold text-[#75162D]">{completedTasksCount} / 3</span>
+                    </div>
+                    <div className="w-full bg-[#DCCFBE]/30 h-1.5 rounded-full overflow-hidden">
+                      <div 
+                        className="bg-[#75162D] h-full transition-all duration-500" 
+                        style={{ width: `${Math.min(100, (completedTasksCount / 3) * 100)}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Focus Sessions Progress */}
+                  <div className="space-y-1">
+                    <div className="flex justify-between text-[11px]">
+                      <span className="text-[#6A625B] font-medium flex items-center gap-1">
+                        <Clock className="h-3 w-3 text-[#75162D]" /> Focus Sessions
+                      </span>
+                      <span className="text-xs font-bold text-[#75162D]">{completedFocusSessions} / 5</span>
+                    </div>
+                    <div className="w-full bg-[#DCCFBE]/30 h-1.5 rounded-full overflow-hidden">
+                      <div 
+                        className="bg-[#75162D] h-full transition-all duration-500" 
+                        style={{ width: `${Math.min(100, (completedFocusSessions / 5) * 100)}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Activity Days Progress */}
+                  <div className="space-y-1">
+                    <div className="flex justify-between text-[11px]">
+                      <span className="text-[#6A625B] font-medium flex items-center gap-1">
+                        <Calendar className="h-3 w-3 text-[#75162D]" /> Activity Days
+                      </span>
+                      <span className="text-xs font-bold text-[#75162D]">{activityDaysCount} / 7</span>
+                    </div>
+                    <div className="w-full bg-[#DCCFBE]/30 h-1.5 rounded-full overflow-hidden">
+                      <div 
+                        className="bg-[#75162D] h-full transition-all duration-500" 
+                        style={{ width: `${Math.min(100, (activityDaysCount / 7) * 100)}%` }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </>
         )}
 
       </div>

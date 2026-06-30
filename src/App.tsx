@@ -232,7 +232,7 @@ function MainAppContent() {
         <div className="fixed inset-0 z-50 flex md:hidden">
           {/* Backdrop with elegant fade */}
           <div 
-            className="fixed inset-0 bg-[#2D2520]/40 backdrop-blur-xs transition-opacity duration-300"
+            className="fixed inset-0 bg-[#2D2520]/50 transition-opacity duration-300"
             onClick={() => setIsMobileDrawerOpen(false)}
           />
 

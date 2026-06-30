@@ -13,6 +13,114 @@ export const AnalyticsView: React.FC = () => {
   const { tasks, forecastDays, forecastSummary, focusEvents = [] } = useApp();
 
   const completedTasks = tasks.filter(t => t.completed);
+
+  // Calculate historical metrics for new user insights threshold
+  const completedTasksCount = completedTasks.length;
+  const completedFocusSessions = focusEvents.filter(e => e.eventType === 'complete_step' || e.eventType === 'complete_task').length;
+
+  const activityDates = new Set<string>();
+  tasks.forEach(t => {
+    if (t.createdAt) activityDates.add(t.createdAt.substring(0, 10));
+    if (t.completedAt) activityDates.add(t.completedAt.substring(0, 10));
+    if (t.deadline) activityDates.add(t.deadline.substring(0, 10));
+  });
+  focusEvents.forEach(e => {
+    if (e.timestamp) {
+      activityDates.add(e.timestamp.substring(0, 10));
+    }
+  });
+  const activityDaysCount = activityDates.size;
+  const activityDays = activityDaysCount;
+
+  const hasSufficientData = completedTasksCount >= 3 || completedFocusSessions >= 5 || activityDaysCount >= 7;
+  const insightsUnlocked = hasSufficientData;
+
+  // Temporary verification console logs as requested
+  console.log("Completed Tasks:", completedTasks);
+  console.log("Completed Focus Sessions:", completedFocusSessions);
+  console.log("Activity Days:", activityDays);
+  console.log("Insights Unlocked:", insightsUnlocked);
+
+  // Calculate actual dynamic insights for Busiest Days, Focus Patterns, and Completion Habits
+  // --- Busiest Days ---
+  const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+  const dayCounts = [0, 0, 0, 0, 0, 0, 0];
+  tasks.forEach(t => {
+    const dateStr = t.deadline || t.createdAt;
+    if (dateStr) {
+      const d = new Date(dateStr);
+      const day = d.getDay();
+      if (!isNaN(day)) {
+        dayCounts[day]++;
+      }
+    }
+  });
+  focusEvents.forEach(e => {
+    if (e.timestamp) {
+      const d = new Date(e.timestamp);
+      const day = d.getDay();
+      if (!isNaN(day)) {
+        dayCounts[day]++;
+      }
+    }
+  });
+  let busiestDayIdx = 2; // Default to Tuesday
+  let maxDayCount = -1;
+  dayCounts.forEach((count, idx) => {
+    if (count > maxDayCount) {
+      maxDayCount = count;
+      busiestDayIdx = idx;
+    }
+  });
+  const busiestDayName = dayNames[busiestDayIdx];
+
+  // --- Focus Patterns ---
+  let morningCount = 0;   // 5 AM - 12 PM
+  let afternoonCount = 0; // 12 PM - 5 PM
+  let eveningCount = 0;   // 5 PM - 11 PM
+  let nightCount = 0;     // 11 PM - 5 AM
+
+  focusEvents.forEach(e => {
+    if (e.timestamp) {
+      const d = new Date(e.timestamp);
+      const hour = d.getHours();
+      if (!isNaN(hour)) {
+        if (hour >= 5 && hour < 12) morningCount++;
+        else if (hour >= 12 && hour < 17) afternoonCount++;
+        else if (hour >= 17 && hour < 23) eveningCount++;
+        else nightCount++;
+      }
+    }
+  });
+
+  let favoriteTimeSlot = "Morning (5 AM - 12 PM)";
+  let maxSlotCount = morningCount;
+  if (afternoonCount > maxSlotCount) {
+    favoriteTimeSlot = "Afternoon (12 PM - 5 PM)";
+    maxSlotCount = afternoonCount;
+  }
+  if (eveningCount > maxSlotCount) {
+    favoriteTimeSlot = "Evening (5 PM - 11 PM)";
+    maxSlotCount = eveningCount;
+  }
+  if (nightCount > maxSlotCount) {
+    favoriteTimeSlot = "Late Night (11 PM - 5 AM)";
+    maxSlotCount = nightCount;
+  }
+
+  // --- Completion Habits ---
+  const tasksWithChecklists = tasks.filter(t => t.subtasks && t.subtasks.length > 0);
+  const tasksWithoutChecklists = tasks.filter(t => !t.subtasks || t.subtasks.length === 0);
+  const completedWithChecklists = tasksWithChecklists.filter(t => t.completed).length;
+  const completedWithoutChecklists = tasksWithoutChecklists.filter(t => t.completed).length;
+
+  const rateWithChecklists = tasksWithChecklists.length > 0
+    ? Math.round((completedWithChecklists / tasksWithChecklists.length) * 100)
+    : 0;
+  const rateWithoutChecklists = tasksWithoutChecklists.length > 0
+    ? Math.round((completedWithoutChecklists / tasksWithoutChecklists.length) * 100)
+    : 0;
+  
   
   // Calculate estimation statistics safely without NaN or infinity
   const estimationData = completedTasks.map(t => {
@@ -375,39 +483,110 @@ export const AnalyticsView: React.FC = () => {
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          
-          <div className="border border-[#DCCFBE]/40 rounded-[10px] p-5.5 bg-[#F8F3EC]/50 space-y-2">
-            <div className="flex items-center gap-2 text-[#75162D]">
-              <Calendar className="h-4.5 w-4.5" />
-              <h4 className="text-xs font-bold uppercase tracking-wider">Busiest Days</h4>
+        {hasSufficientData ? (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 animate-fadeIn">
+            
+            <div className="border border-[#DCCFBE]/40 rounded-[10px] p-5.5 bg-[#F8F3EC]/50 space-y-2">
+              <div className="flex items-center gap-2 text-[#75162D]">
+                <Calendar className="h-4.5 w-4.5" />
+                <h4 className="text-xs font-bold uppercase tracking-wider font-sans">Busiest Days</h4>
+              </div>
+              <p className="text-xs text-[#6A625B] font-light leading-relaxed">
+                {busiestDayName}s typically accumulate the highest density of tasks and focus events. Shifting minor or low-priority items to later in the week can help flatten this workload peak.
+              </p>
             </div>
-            <p className="text-xs text-[#6A625B] font-light leading-relaxed">
-              Tuesdays and Wednesdays typically accumulate 65% of your weekly workload. Shifting minor tasks to Thursdays helps flatten this stress peak.
-            </p>
-          </div>
 
-          <div className="border border-[#DCCFBE]/40 rounded-[10px] p-5.5 bg-[#F8F3EC]/50 space-y-2">
-            <div className="flex items-center gap-2 text-[#75162D]">
-              <Zap className="h-4.5 w-4.5" />
-              <h4 className="text-xs font-bold uppercase tracking-wider">Focus Patterns</h4>
+            <div className="border border-[#DCCFBE]/40 rounded-[10px] p-5.5 bg-[#F8F3EC]/50 space-y-2">
+              <div className="flex items-center gap-2 text-[#75162D]">
+                <Zap className="h-4.5 w-4.5" />
+                <h4 className="text-xs font-bold uppercase tracking-wider font-sans">Focus Patterns</h4>
+              </div>
+              <p className="text-xs text-[#6A625B] font-light leading-relaxed">
+                Your primary peak of completed focus events occurs during the {favoriteTimeSlot.toLowerCase()} hours. Starting major focus sessions early in this block lets you ride your natural peak biological rhythm.
+              </p>
             </div>
-            <p className="text-xs text-[#6A625B] font-light leading-relaxed">
-              You complete 40% more focused efforts between 8:30 AM and 11:30 AM than any other slot. Start focus sessions early to ride your peak daily rhythm.
-            </p>
-          </div>
 
-          <div className="border border-[#DCCFBE]/40 rounded-[10px] p-5.5 bg-[#F8F3EC]/50 space-y-2">
-            <div className="flex items-center gap-2 text-[#75162D]">
-              <RefreshCw className="h-4.5 w-4.5" />
-              <h4 className="text-xs font-bold uppercase tracking-wider">Completion Habits</h4>
+            <div className="border border-[#DCCFBE]/40 rounded-[10px] p-5.5 bg-[#F8F3EC]/50 space-y-2">
+              <div className="flex items-center gap-2 text-[#75162D]">
+                <RefreshCw className="h-4.5 w-4.5" />
+                <h4 className="text-xs font-bold uppercase tracking-wider font-sans">Completion Habits</h4>
+              </div>
+              <p className="text-xs text-[#6A625B] font-light leading-relaxed">
+                {tasksWithChecklists.length > 0 && rateWithChecklists > rateWithoutChecklists ? (
+                  `Decomposing large tasks into simple subtask checklists has increased your task success probability to ${rateWithChecklists}%, compared to ${rateWithoutChecklists}% for tasks without checklist items.`
+                ) : (
+                  `Your tasks currently have an overall completion rate of ${Math.round((completedTasks.length / Math.max(1, tasks.length)) * 100)}%. Dividing larger tasks into smaller, action-oriented checklists can help increase success rate and reduce starting friction.`
+                )}
+              </p>
             </div>
-            <p className="text-xs text-[#6A625B] font-light leading-relaxed">
-              Decomposing large tasks into simple, action-oriented checklists increases your direct success probability by 35% compared to monolithic items.
-            </p>
-          </div>
 
-        </div>
+          </div>
+        ) : (
+          <div className="border border-dashed border-[#DCCFBE] rounded-[10px] bg-[#F8F3EC]/20 p-6.5 text-center space-y-6">
+            <div className="max-w-md mx-auto space-y-2">
+              <h4 className="text-base font-semibold text-[#2D2520] font-sans">
+                Learning From Your Workflow
+              </h4>
+              <p className="text-xs text-[#6A625B] font-light leading-relaxed">
+                We're still learning how you work. Complete tasks, finish focus sessions, and interact with DoNext to unlock personalized planning insights.
+              </p>
+            </div>
+
+            {/* Progress indicators */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 max-w-xl mx-auto pt-2">
+              <div className="bg-[#FFFDF9] border border-[#DCCFBE]/50 rounded-[10px] p-3.5 space-y-2 text-center shadow-xs">
+                <span className="text-[10px] font-mono uppercase tracking-wider text-[#6A625B] block">Completed Tasks</span>
+                <div className="flex items-center justify-center gap-1.5 mt-1">
+                  <span className={`text-sm font-bold ${completedTasksCount >= 3 ? "text-[#5F7358]" : "text-[#75162D]"}`}>
+                    {completedTasksCount}
+                  </span>
+                  <span className="text-xs text-[#6A625B]/60">/ 3</span>
+                </div>
+                {/* Visual Progress Bar */}
+                <div className="w-full bg-[#E8D9C1]/40 h-1.5 rounded-full overflow-hidden">
+                  <div 
+                    className="bg-[#75162D] h-full transition-all duration-500" 
+                    style={{ width: `${Math.min(100, (completedTasksCount / 3) * 100)}%` }}
+                  />
+                </div>
+              </div>
+
+              <div className="bg-[#FFFDF9] border border-[#DCCFBE]/50 rounded-[10px] p-3.5 space-y-2 text-center shadow-xs">
+                <span className="text-[10px] font-mono uppercase tracking-wider text-[#6A625B] block">Focus Sessions</span>
+                <div className="flex items-center justify-center gap-1.5 mt-1">
+                  <span className={`text-sm font-bold ${completedFocusSessions >= 5 ? "text-[#5F7358]" : "text-[#75162D]"}`}>
+                    {completedFocusSessions}
+                  </span>
+                  <span className="text-xs text-[#6A625B]/60">/ 5</span>
+                </div>
+                {/* Visual Progress Bar */}
+                <div className="w-full bg-[#E8D9C1]/40 h-1.5 rounded-full overflow-hidden">
+                  <div 
+                    className="bg-[#75162D] h-full transition-all duration-500" 
+                    style={{ width: `${Math.min(100, (completedFocusSessions / 5) * 100)}%` }}
+                  />
+                </div>
+              </div>
+
+              <div className="bg-[#FFFDF9] border border-[#DCCFBE]/50 rounded-[10px] p-3.5 space-y-2 text-center shadow-xs">
+                <span className="text-[10px] font-mono uppercase tracking-wider text-[#6A625B] block">Activity Days</span>
+                <div className="flex items-center justify-center gap-1.5 mt-1">
+                  <span className={`text-sm font-bold ${activityDaysCount >= 7 ? "text-[#5F7358]" : "text-[#75162D]"}`}>
+                    {activityDaysCount}
+                  </span>
+                  <span className="text-xs text-[#6A625B]/60">/ 7</span>
+                </div>
+                {/* Visual Progress Bar */}
+                <div className="w-full bg-[#E8D9C1]/40 h-1.5 rounded-full overflow-hidden">
+                  <div 
+                    className="bg-[#75162D] h-full transition-all duration-500" 
+                    style={{ width: `${Math.min(100, (activityDaysCount / 7) * 100)}%` }}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
     </div>
