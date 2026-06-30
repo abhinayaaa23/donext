@@ -128,27 +128,27 @@ AI Features
 
 ### Dashboard
 
-![Dashboard](images/dashboard.png)
+![Dashboard](src/images/dashboard.png)
 
 ### AI Effort Estimation
 
-![AI Effort Estimation](images/effort-estimation.png)
+![AI Effort Estimation](src/images/effort-estimation.png)
 
 ### Task Decomposition
 
-![Task Decomposition](images/task-decomposition.png)
+![Task Decomposition](src/images/task-decomposition.png)
 
 ### Focus Session
 
-![Focus Session](images/focus-session.png)
+![Focus Session](src/images/focus-session.png)
 
 ### Workload Forecasting
 
-![Workload Forecasting](images/workload-forecast.png)
+![Workload Forecasting](src/images/workload-forecast.png)
 
 ### Productivity Insights
 
-![Productivity Insights](images/productivity-insights.png)
+![Productivity Insights](src/images/productivity-insights.png)
 
 ---
 
